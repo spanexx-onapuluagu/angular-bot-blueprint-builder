@@ -7,6 +7,8 @@ import { PlannerFooter } from "./PlannerFooter";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/components/ui/sonner";
 import { Card, CardContent } from "@/components/ui/card";
+import { generateMarkdown } from "@/lib/markdown/generator";
+import { getProjectSuggestions, savePhase } from "@/lib/supabase/projects";
 
 export interface FormValues {
   [key: string]: string;
@@ -18,6 +20,15 @@ export function PlannerWizard() {
   const [completedPhases, setCompletedPhases] = useState<string[]>([]);
   const [exportModalOpen, setExportModalOpen] = useState(false);
   const [isInitialized, setIsInitialized] = useState(false);
+  const [projectId, setProjectId] = useState<string>("");
+  const [suggestions, setSuggestions] = useState<any[]>([]);
+
+  // Load suggestions from Supabase
+  useEffect(() => {
+    getProjectSuggestions()
+      .then(suggestions => setSuggestions(suggestions))
+      .catch(error => console.error("Error loading suggestions:", error));
+  }, []);
 
   // Load saved data from localStorage on component mount
   useEffect(() => {
@@ -60,6 +71,17 @@ export function PlannerWizard() {
       ...prev,
       [fieldId]: value,
     }));
+
+    // Save to Supabase if we have a project ID
+    if (projectId) {
+      savePhase(projectId, currentPhaseId, {
+        ...formValues,
+        [fieldId]: value
+      }).catch(error => {
+        console.error("Error saving phase:", error);
+        toast.error("Failed to save changes");
+      });
+    }
   };
 
   const validatePhase = (phase: Phase): boolean => {
@@ -135,20 +157,7 @@ export function PlannerWizard() {
   };
 
   const generateReport = () => {
-    let report = "# Angular AI Robot Project Blueprint\n\n";
-
-    phases.forEach(phase => {
-      report += `## ${phase.title}\n\n`;
-      
-      phase.fields.forEach(field => {
-        const value = formValues[field.id] || "Not provided";
-        report += `### ${field.label}\n${value}\n\n`;
-      });
-      
-      report += "\n";
-    });
-
-    return report;
+    return generateMarkdown(formValues);
   };
 
   const handleExport = () => {
