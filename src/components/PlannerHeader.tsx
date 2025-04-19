@@ -16,10 +16,10 @@ export function PlannerHeader({ completedPhases, totalPhases }: PlannerHeaderPro
         <div className="flex flex-col md:flex-row items-center justify-between">
           <div className="mb-4 md:mb-0">
             <h1 className="text-3xl md:text-4xl font-bold">
-              Angular AI Robot Blueprint Builder
+              Angular Application Blueprint Builder
             </h1>
             <p className="mt-2 text-indigo-100">
-              Systematically plan your Angular project for AI robot development
+              Build a comprehensive plan for your Angular application
             </p>
           </div>
           
