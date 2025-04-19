@@ -31,7 +31,16 @@ export function PhaseContent({ phase, formValues, onInputChange }: PhaseContentP
               value={value}
               onChange={(e) => onInputChange(field.id, e.target.value)}
               className="w-full"
+              autoComplete="on"
+              name={field.id}
+              list={`suggestions-${field.id}`}
             />
+            <datalist id={`suggestions-${field.id}`}>
+              {/* Dynamic suggestions could be added here based on previous inputs */}
+              {field.options?.map(option => (
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
+            </datalist>
             {field.helperText && (
               <p className="text-xs text-gray-500">{field.helperText}</p>
             )}
@@ -51,6 +60,8 @@ export function PhaseContent({ phase, formValues, onInputChange }: PhaseContentP
               value={value}
               onChange={(e) => onInputChange(field.id, e.target.value)}
               className="min-h-24 w-full"
+              autoComplete="on"
+              name={field.id}
             />
             {field.helperText && (
               <p className="text-xs text-gray-500">{field.helperText}</p>

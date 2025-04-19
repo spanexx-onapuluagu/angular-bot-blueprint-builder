@@ -1,5 +1,4 @@
-
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { phases, Phase, Field } from "@/lib/data";
 import { PlannerHeader } from "./PlannerHeader";
 import { PhaseSelector } from "./PhaseSelector";
@@ -14,10 +13,45 @@ export interface FormValues {
 }
 
 export function PlannerWizard() {
-  const [currentPhaseId, setCurrentPhaseId] = useState<string>(phases[0].id);
+  const [currentPhaseId, setCurrentPhaseId] = useState<string>("");
   const [formValues, setFormValues] = useState<FormValues>({});
   const [completedPhases, setCompletedPhases] = useState<string[]>([]);
   const [exportModalOpen, setExportModalOpen] = useState(false);
+  const [isInitialized, setIsInitialized] = useState(false);
+
+  // Load saved data from localStorage on component mount
+  useEffect(() => {
+    const savedState = localStorage.getItem('angularPlannerState');
+    
+    if (savedState) {
+      try {
+        const parsedState = JSON.parse(savedState);
+        setCurrentPhaseId(parsedState.currentPhaseId || phases[0].id);
+        setFormValues(parsedState.formValues || {});
+        setCompletedPhases(parsedState.completedPhases || []);
+      } catch (e) {
+        console.error("Error parsing saved state", e);
+        setCurrentPhaseId(phases[0].id);
+      }
+    } else {
+      setCurrentPhaseId(phases[0].id);
+    }
+    
+    setIsInitialized(true);
+  }, []);
+
+  // Save state to localStorage whenever it changes
+  useEffect(() => {
+    if (!isInitialized) return;
+    
+    const stateToSave = {
+      currentPhaseId,
+      formValues,
+      completedPhases
+    };
+    
+    localStorage.setItem('angularPlannerState', JSON.stringify(stateToSave));
+  }, [currentPhaseId, formValues, completedPhases, isInitialized]);
 
   const currentPhase = phases.find((phase) => phase.id === currentPhaseId) || phases[0];
 
@@ -54,7 +88,7 @@ export function PlannerWizard() {
     
     return isValid;
   };
-
+  
   const handleNextPhase = () => {
     if (validatePhase(currentPhase)) {
       if (currentPhase.nextPhase) {
@@ -144,6 +178,17 @@ export function PlannerWizard() {
       });
   };
 
+  // Add reset function to clear saved data
+  const handleReset = () => {
+    if (confirm("Are you sure you want to reset all your progress? This cannot be undone.")) {
+      localStorage.removeItem('angularPlannerState');
+      setCurrentPhaseId(phases[0].id);
+      setFormValues({});
+      setCompletedPhases([]);
+      toast.info("All progress has been reset");
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-50">
       <PlannerHeader 
@@ -160,6 +205,17 @@ export function PlannerWizard() {
               completedPhases={completedPhases}
               onPhaseClick={handlePhaseClick}
             />
+            
+            <div className="mt-6">
+              <Button 
+                variant="outline" 
+                size="sm" 
+                className="w-full text-red-500 hover:text-red-700 hover:bg-red-50"
+                onClick={handleReset}
+              >
+                Reset Progress
+              </Button>
+            </div>
           </div>
           
           <div className="md:w-3/4">
