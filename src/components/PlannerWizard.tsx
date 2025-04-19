@@ -1,68 +1,32 @@
-import { useState, useEffect } from "react";
-import { phases, Phase, Field } from "@/lib/data";
+
+import { phases, Phase } from "@/lib/data";
 import { PlannerHeader } from "./PlannerHeader";
 import { PhaseSelector } from "./PhaseSelector";
 import { PhaseContent } from "./PhaseContent";
 import { PlannerFooter } from "./PlannerFooter";
+import { ExportModal } from "./ExportModal";
 import { Button } from "@/components/ui/button";
+import { usePlannerState } from "@/hooks/usePlannerState";
+import { usePhaseValidation } from "@/hooks/usePhaseValidation";
 import { toast } from "@/components/ui/sonner";
-import { Card, CardContent } from "@/components/ui/card";
-import { generateMarkdown } from "@/lib/markdown/generator";
-import { getProjectSuggestions, savePhase } from "@/lib/supabase/projects";
 
 export interface FormValues {
   [key: string]: string;
 }
 
 export function PlannerWizard() {
-  const [currentPhaseId, setCurrentPhaseId] = useState<string>("");
-  const [formValues, setFormValues] = useState<FormValues>({});
-  const [completedPhases, setCompletedPhases] = useState<string[]>([]);
-  const [exportModalOpen, setExportModalOpen] = useState(false);
-  const [isInitialized, setIsInitialized] = useState(false);
-  const [projectId, setProjectId] = useState<string>("");
-  const [suggestions, setSuggestions] = useState<any[]>([]);
+  const {
+    currentPhaseId,
+    setCurrentPhaseId,
+    formValues,
+    setFormValues,
+    completedPhases,
+    setCompletedPhases,
+    exportModalOpen,
+    setExportModalOpen
+  } = usePlannerState(phases[0].id);
 
-  // Load suggestions from Supabase
-  useEffect(() => {
-    getProjectSuggestions()
-      .then(suggestions => setSuggestions(suggestions))
-      .catch(error => console.error("Error loading suggestions:", error));
-  }, []);
-
-  // Load saved data from localStorage on component mount
-  useEffect(() => {
-    const savedState = localStorage.getItem('angularPlannerState');
-    
-    if (savedState) {
-      try {
-        const parsedState = JSON.parse(savedState);
-        setCurrentPhaseId(parsedState.currentPhaseId || phases[0].id);
-        setFormValues(parsedState.formValues || {});
-        setCompletedPhases(parsedState.completedPhases || []);
-      } catch (e) {
-        console.error("Error parsing saved state", e);
-        setCurrentPhaseId(phases[0].id);
-      }
-    } else {
-      setCurrentPhaseId(phases[0].id);
-    }
-    
-    setIsInitialized(true);
-  }, []);
-
-  // Save state to localStorage whenever it changes
-  useEffect(() => {
-    if (!isInitialized) return;
-    
-    const stateToSave = {
-      currentPhaseId,
-      formValues,
-      completedPhases
-    };
-    
-    localStorage.setItem('angularPlannerState', JSON.stringify(stateToSave));
-  }, [currentPhaseId, formValues, completedPhases, isInitialized]);
+  const { validatePhase } = usePhaseValidation();
 
   const currentPhase = phases.find((phase) => phase.id === currentPhaseId) || phases[0];
 
@@ -71,48 +35,10 @@ export function PlannerWizard() {
       ...prev,
       [fieldId]: value,
     }));
-
-    // Save to Supabase if we have a project ID
-    if (projectId) {
-      savePhase(projectId, currentPhaseId, {
-        ...formValues,
-        [fieldId]: value
-      }).catch(error => {
-        console.error("Error saving phase:", error);
-        toast.error("Failed to save changes");
-      });
-    }
   };
 
-  const validatePhase = (phase: Phase): boolean => {
-    let isValid = true;
-    
-    for (const fieldId of phase.required) {
-      const field = phase.fields.find((f) => f.id === fieldId);
-      const value = formValues[fieldId] || "";
-      
-      if (!field) continue;
-      
-      if (field.validation?.required && !value) {
-        isValid = false;
-        toast.error(`${field.label} is required`);
-      } else if (field.validation?.minLength && value.length < field.validation.minLength) {
-        isValid = false;
-        toast.error(`${field.label} must be at least ${field.validation.minLength} characters`);
-      } else if (field.validation?.maxLength && value.length > field.validation.maxLength) {
-        isValid = false;
-        toast.error(`${field.label} must be at most ${field.validation.maxLength} characters`);
-      } else if (field.validation?.pattern && !new RegExp(field.validation.pattern).test(value)) {
-        isValid = false;
-        toast.error(`${field.label} format is invalid`);
-      }
-    }
-    
-    return isValid;
-  };
-  
   const handleNextPhase = () => {
-    if (validatePhase(currentPhase)) {
+    if (validatePhase(currentPhase, formValues)) {
       if (currentPhase.nextPhase) {
         setCompletedPhases((prev) => 
           prev.includes(currentPhaseId) ? prev : [...prev, currentPhaseId]
@@ -120,7 +46,6 @@ export function PlannerWizard() {
         setCurrentPhaseId(currentPhase.nextPhase);
         window.scrollTo(0, 0);
       } else {
-        // This is the last phase
         setCompletedPhases((prev) => 
           prev.includes(currentPhaseId) ? prev : [...prev, currentPhaseId]
         );
@@ -141,7 +66,6 @@ export function PlannerWizard() {
     const targetPhase = phases.find(p => p.id === phaseId);
     if (!targetPhase) return;
     
-    // Allow going back to any phase
     if (completedPhases.includes(currentPhaseId) || 
         completedPhases.some(p => p === phaseId) || 
         isAdjacentPhase(phaseId)) {
@@ -156,38 +80,6 @@ export function PlannerWizard() {
     return currentPhase.nextPhase === phaseId || currentPhase.prevPhase === phaseId;
   };
 
-  const generateReport = () => {
-    return generateMarkdown(formValues);
-  };
-
-  const handleExport = () => {
-    const report = generateReport();
-    const blob = new Blob([report], { type: 'text/markdown' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'angular-ai-robot-blueprint.md';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    toast.success("Blueprint exported successfully!");
-    setExportModalOpen(false);
-  };
-
-  const handleCopyToClipboard = () => {
-    const report = generateReport();
-    navigator.clipboard.writeText(report)
-      .then(() => {
-        toast.success("Blueprint copied to clipboard!");
-        setExportModalOpen(false);
-      })
-      .catch(() => {
-        toast.error("Failed to copy to clipboard");
-      });
-  };
-
-  // Add reset function to clear saved data
   const handleReset = () => {
     if (confirm("Are you sure you want to reset all your progress? This cannot be undone.")) {
       localStorage.removeItem('angularPlannerState');
@@ -245,28 +137,11 @@ export function PlannerWizard() {
         </div>
       </div>
 
-      {exportModalOpen && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <Card className="w-full max-w-lg">
-            <CardContent className="p-6">
-              <h2 className="text-2xl font-bold mb-4">Export Blueprint</h2>
-              <p className="mb-6">Congratulations on completing your Angular AI Robot Blueprint! You can now export your blueprint as a Markdown file or copy it to your clipboard.</p>
-              
-              <div className="flex flex-col md:flex-row gap-4">
-                <Button className="flex-1" onClick={handleExport}>
-                  Download as Markdown
-                </Button>
-                <Button className="flex-1" variant="outline" onClick={handleCopyToClipboard}>
-                  Copy to Clipboard
-                </Button>
-                <Button className="flex-1" variant="destructive" onClick={() => setExportModalOpen(false)}>
-                  Close
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
+      <ExportModal 
+        isOpen={exportModalOpen}
+        onClose={() => setExportModalOpen(false)}
+        formValues={formValues}
+      />
     </div>
   );
 }
